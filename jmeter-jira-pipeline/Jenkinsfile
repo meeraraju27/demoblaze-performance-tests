@@ -11,25 +11,28 @@ pipeline {
 
         stage('Run JMeter Stress Test') {
             steps {
-                bat '''
-                    REM FULL CLEAN - remove stale results/HTML
-                    if exist results rmdir /s /q results
-                    if exist html-report rmdir /s /q html-report
-                    
-                    REM Create fresh directories
-                    mkdir results
-                    mkdir html-report
-                    
-                    REM DEBUG: Verify workspace and files
-                    echo WORKSPACE=%%WORKSPACE%%
-                    dir "%%WORKSPACE%%\\jmeter-jira-pipeline"
-                    
-                    REM Run JMeter with EXACT PATH - stays in workspace
-                    "C:\\\\Users\\\\Admin\\\\Desktop\\\\Tools\\\\JMeter\\\\apache-jmeter-5.6.3\\\\apache-jmeter-5.6.3\\\\bin\\\\jmeter.bat" -n ^
-                        -t "%%WORKSPACE%%\\jmeter-jira-pipeline\\Demoblaze_Jenkins_Pipeline.jmx" ^
-                        -l "%%WORKSPACE%%\\results\\results.jtl" ^
-                        -e -o "%%WORKSPACE%%\\html-report"
-                '''
+                script {
+                    def ws = env.WORKSPACE
+                    bat """
+                        REM FULL CLEAN - remove stale results/HTML
+                        if exist results rmdir /s /q results
+                        if exist html-report rmdir /s /q html-report
+                        
+                        REM Create fresh directories
+                        mkdir results
+                        mkdir html-report
+                        
+                        REM DEBUG: Verify workspace and files
+                        echo Workspace: ${ws}
+                        dir "${ws}\\jmeter-jira-pipeline"
+                        
+                        REM Run JMeter with EXACT PATH - no cd needed
+                        "C:\\Users\\Admin\\Desktop\\Tools\\JMeter\\apache-jmeter-5.6.3\\apache-jmeter-5.6.3\\bin\\jmeter.bat" -n ^
+                            -t "${ws}\\jmeter-jira-pipeline\\Demoblaze_Jenkins_Pipeline.jmx" ^
+                            -l "${ws}\\results\\results.jtl" ^
+                            -e -o "${ws}\\html-report"
+                    """
+                }
             }
         }
 
@@ -64,8 +67,8 @@ pipeline {
                                     script: """
                                         curl -s -X POST ^
                                         -H "Content-Type: application/json" ^
-                                        -u "meeraraju2711@gmail.com:${JIRA_TOKEN}" ^
-                                        -d "{\"fields\":{\"project\":{\"key\":\"KAN\"},\"summary\":\"Demoblaze Perf FAIL - ${failCount} errors\",\"description\":\"Build ${BUILD_NUMBER}: 33% failure rate.\\n${BUILD_URL}\",\"issuetype\":{\"name\":\"Bug\"}}}" ^
+                                        -u "meeraraju2711@gmail.com:%JIRA_TOKEN%" ^
+                                        -d "{\"fields\":{\"project\":{\"key\":\"KAN\"},\"summary\":\"Demoblaze Perf FAIL - %failCount% errors\",\"description\":\"Build %BUILD_NUMBER%: 33%% failure rate.\\n%BUILD_URL%\",\"issuetype\":{\"name\":\"Bug\"}}}" ^
                                         https://meeraraju2711.atlassian.net/rest/api/2/issue
                                     """,
                                     returnStdout: true
