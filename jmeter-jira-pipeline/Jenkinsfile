@@ -1,19 +1,7 @@
 pipeline {
     agent any
 
-    environment {
-        JMETER_BIN   = 'C:\\\\Users\\\\Admin\\\\Desktop\\\\Tools\\\\JMeter\\\\apache-jmeter-5.6.3\\\\apache-jmeter-5.6.3\\\\bin\\\\jmeter.bat'
-        JMX_FILE     = 'jmeter-jira-pipeline\\\\Demoblaze_Jenkins_Pipeline.jmx'
-        RESULTS_DIR  = 'results'
-        RESULTS_FILE = "${RESULTS_DIR}\\\\results.jtl"
-        REPORT_DIR   = 'html-report'
-        JIRA_URL     = 'https://meeraraju2711.atlassian.net'
-        JIRA_EMAIL   = 'meeraraju2711@gmail.com'
-        JIRA_PROJECT = 'KAN'
-    }
-
     stages {
-
         stage('Checkout') {
             steps {
                 git branch: 'main',
@@ -24,49 +12,61 @@ pipeline {
         stage('Run JMeter Stress Test') {
             steps {
                 bat '''
-                    if not exist "${RESULTS_DIR}" mkdir "${RESULTS_DIR}"
-                    if exist "${REPORT_DIR}" rmdir /s /q "${REPORT_DIR}"
-                    cmd /c "${JMETER_BIN}" -n -t "${JMX_FILE}" -l "${RESULTS_FILE}" -e -o "${REPORT_DIR}"
+                    REM Clean previous results
+                    if not exist results mkdir results
+                    if exist html-report rmdir /s /q html-report
+                    
+                    REM Go to JMeter bin and run directly
+                    cd /d "C:\\Users\\Admin\\Desktop\\Tools\\JMeter\\apache-jmeter-5.6.3\\apache-jmeter-5.6.3\\bin"
+                    
+                    REM Full workspace paths - adjust if workspace path differs
+                    jmeter -n ^
+                        -t "C:\\ProgramData\\Jenkins\\.jenkins\\workspace\\Demoblaze-Performance-Pipeline\\jmeter-jira-pipeline\\Demoblaze_Jenkins_Pipeline.jmx" ^
+                        -l "C:\\ProgramData\\Jenkins\\.jenkins\\workspace\\Demoblaze-Performance-Pipeline\\results\\results.jtl" ^
+                        -e -o "C:\\ProgramData\\Jenkins\\.jenkins\\workspace\\Demoblaze-Performance-Pipeline\\html-report"
                 '''
             }
         }
 
         stage('Publish HTML Report') {
             steps {
-                publishHTML(target: [
-                    allowMissing         : false,
+                publishHTML([
+                    allowMissing: false,
                     alwaysLinkToLastBuild: true,
-                    keepAll              : true,
-                    reportDir            : "${REPORT_DIR}",
-                    reportFiles          : 'index.html',
-                    reportName           : 'JMeter Stress Test Report'
+                    keepAll: true,
+                    reportDir: 'html-report',
+                    reportFiles: 'index.html',
+                    reportName: 'JMeter Report'
                 ])
             }
         }
 
-        stage('Check Results & Create Jira Ticket') {
+        stage('Jira Automation') {
             steps {
                 script {
-                    def failCount = bat(
-                        script: "@findstr /c:\"false,\" \"${RESULTS_FILE}\"",
-                        returnStdout: true
-                    ).trim().readLines().size()
-
-                    echo "Failed samples: ${failCount}"
-
+                    def resultsFile = 'results\\results.jtl'
+                    def failCount = 0
+                    
+                    if (fileExists(resultsFile)) {
+                        def results = readFile(resultsFile)
+                        failCount = (results =~ /(?s).*?false,.*?/).size()
+                    }
+                    
+                    echo "Failed requests: ${failCount}"
+                    
                     if (failCount > 0) {
-                        echo "Failures found! Creating Jira ticket..."
+                        echo "Creating Jira ticket for ${failCount} failures"
                         withCredentials([string(credentialsId: 'JIRA_API_TOKEN', variable: 'JIRA_TOKEN')]) {
                             bat """
-                                curl -s -X POST ^
+                                curl -X POST ^
+                                -H "Authorization: Basic %JIRA_EMAIL%:%JIRA_TOKEN%" ^
                                 -H "Content-Type: application/json" ^
-                                -u "${JIRA_EMAIL}:${JIRA_TOKEN}" ^
-                                --data "{\"fields\":{\"project\":{\"key\":\"${JIRA_PROJECT}\"},\"summary\":\"Jenkins - Stress Test Failed (${failCount} samples)\",\"description\":\"Automated failure detected by Jenkins.\\\\n\\\\nFailed Samples: ${failCount}\\\\nBuild Number: %BUILD_NUMBER%\\\\nBuild URL: %BUILD_URL%\",\"issuetype\":{\"name\":\"Bug\"}}}" ^
-                                ${JIRA_URL}/rest/api/2/issue
+                                -d "{\"fields\":{\"project\":{\"key\":\"KAN\"},\"summary\":\"Performance Test Failed - ${failCount} errors\",\"description\":\"JMeter test failed in build %BUILD_NUMBER%. Check: %BUILD_URL%\",\"issuetype\":{\"name\":\"Bug\"}}}" ^
+                                https://meeraraju2711.atlassian.net/rest/api/2/issue
                             """
                         }
                     } else {
-                        echo "All tests passed! No Jira ticket needed."
+                        echo " All tests passed!"
                     }
                 }
             }
@@ -74,14 +74,12 @@ pipeline {
     }
 
     post {
-        success {
-            echo "Pipeline completed successfully!"
+        always {
+            echo "Build ${BUILD_NUMBER} complete."
+            archiveArtifacts artifacts: 'results/**, html-report/**', allowEmptyArchive: true
         }
         failure {
-            echo "Pipeline failed! Check the console output."
-        }
-        always {
-            echo "Build ${BUILD_NUMBER} finished."
+            echo "Check console above."
         }
     }
 }
