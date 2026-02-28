@@ -41,29 +41,30 @@ pipeline {
             }
         }
 
-        stage('Jira Automation') {
+        stage('Create Jira Ticket') {
             steps {
                 script {
                     def resultsFile = 'results/results.jtl'
                     if (fileExists(resultsFile)) {
                         def content = readFile(resultsFile)
                         def failCount = (content =~ /(?s).*?false,.*?/).size()
-                        env.FAIL_COUNT = failCount.toString()
-                        echo "Failed requests: ${failCount}"
-                        
                         if (failCount > 0) {
-                            echo "Creating Jira ticket..."
+                            writeFile file: 'jira.json', text: """
+{
+  "fields": {
+    "project": { "key": "KAN" },
+    "summary": "Demoblaze Perf FAIL - ${failCount} errors", 
+    "description": "Build ${BUILD_NUMBER}\\n${BUILD_URL}",
+    "issuetype": { "name": "Bug" }
+  }
+}
+"""
                             withCredentials([string(credentialsId: 'JIRA_API_TOKEN', variable: 'JIRA_TOKEN')]) {
-                                bat '''
-                                    curl -s -X POST ^
-                                    -H "Content-Type: application/json" ^
-                                    -u "meeraraju2711@gmail.com:%JIRA_TOKEN%" ^
-                                    -d "{\"fields\":{\"project\":{\"key\":\"KAN\"},\"summary\":\"Demoblaze Perf FAIL - %FAIL_COUNT% errors\",\"description\":\"Build %BUILD_NUMBER%: 33%% failure rate.\\n%BUILD_URL%\",\"issuetype\":{\"name\":\"Bug\"}}}" ^
-                                    "https://meeraraju2711.atlassian.net/rest/api/2/issue"
-                                '''
+                                bat 'curl -s -X POST -H "Content-Type: application/json" -u "meeraraju2711@gmail.com:%JIRA_TOKEN%" --data @jira.json "https://meeraraju2711.atlassian.net/rest/api/2/issue"'
                             }
+                            echo "✅ Jira ticket created for ${failCount} failures!"
                         } else {
-                            echo "All tests passed!"
+                            echo "✅ All tests passed - no ticket needed"
                         }
                     }
                 }
@@ -73,8 +74,10 @@ pipeline {
 
     post {
         always {
-            archiveArtifacts artifacts: 'results/**, html-report/**', allowEmptyArchive: true
-            echo "Build ${BUILD_NUMBER} SUCCESS - View full Performance Report + Artifacts above!"
+            archiveArtifacts artifacts: 'results/**, html-report/**, jira.json', allowEmptyArchive: true
+            echo "🎉 Build ${BUILD_NUMBER} COMPLETE!"
+            echo "📊 Dashboard: Demoblaze Performance Report above"
+            echo "📥 Artifacts: results.jtl + html-report/ ready for download"
         }
     }
 }
