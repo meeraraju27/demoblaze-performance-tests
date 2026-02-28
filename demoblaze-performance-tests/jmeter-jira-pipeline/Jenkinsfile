@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         JMETER_BIN   = 'C:\\Users\\Admin\\Desktop\\Tools\\JMeter\\apache-jmeter-5.6.3\\apache-jmeter-5.6.3\\bin\\jmeter.bat'
-        JMX_FILE     = 'jenkins-jira-pipeline\\Demoblaze_Jenkins_Pipeline.jmx'
+        JMX_FILE     = 'jmeter-jira-pipeline\\Demoblaze_Jenkins_Pipeline.jmx'
         RESULTS_DIR  = 'results'
         RESULTS_FILE = "${RESULTS_DIR}\\results.jtl"
         REPORT_DIR   = 'html-report'
