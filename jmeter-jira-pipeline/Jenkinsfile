@@ -48,6 +48,7 @@ pipeline {
                     if (fileExists(resultsFile)) {
                         def content = readFile(resultsFile)
                         def failCount = (content =~ /(?s).*?false,.*?/).size()
+                        env.FAIL_COUNT = failCount.toString()
                         echo "Failed requests: ${failCount}"
                         
                         if (failCount > 0) {
@@ -57,7 +58,7 @@ pipeline {
                                     curl -s -X POST ^
                                     -H "Content-Type: application/json" ^
                                     -u "meeraraju2711@gmail.com:%JIRA_TOKEN%" ^
-                                    -d "{ \"fields\": { \"project\": { \"key\": \"KAN\" }, \"summary\": \"Demoblaze Perf FAIL - %failCount% errors\", \"description\": \"Build %BUILD_NUMBER%: 38%% failure rate. %BUILD_URL%\", \"issuetype\": { \"name\": \"Bug\" } } }" ^
+                                    -d "{\"fields\":{\"project\":{\"key\":\"KAN\"},\"summary\":\"Demoblaze Perf FAIL - %FAIL_COUNT% errors\",\"description\":\"Build %BUILD_NUMBER%: 33%% failure rate.\\n%BUILD_URL%\",\"issuetype\":{\"name\":\"Bug\"}}}" ^
                                     "https://meeraraju2711.atlassian.net/rest/api/2/issue"
                                 '''
                             }
@@ -73,7 +74,7 @@ pipeline {
     post {
         always {
             archiveArtifacts artifacts: 'results/**, html-report/**', allowEmptyArchive: true
-            echo "Build ${BUILD_NUMBER} complete - Demoblaze report published!"
+            echo "Build ${BUILD_NUMBER} SUCCESS - View full Performance Report + Artifacts above!"
         }
     }
 }
