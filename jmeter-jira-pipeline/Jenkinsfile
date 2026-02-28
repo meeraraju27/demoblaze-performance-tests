@@ -20,17 +20,11 @@ pipeline {
                     mkdir results
                     mkdir html-report
                     
-                    REM Store workspace path
-                    for /f "tokens=*" %%i in ('call "%~dp0jenkins.cmd"') do set WORKSPACE_PATH=%%i
-                    
-                    REM Go to your JMeter bin
-                    cd /d "C:\\Users\\Admin\\Desktop\\Tools\\JMeter\\apache-jmeter-5.6.3\\apache-jmeter-5.6.3\\bin"
-                    
-                    REM Run JMeter using absolute workspace paths
-                    jmeter -n ^
-                        -t "%WORKSPACE_PATH%\\jmeter-jira-pipeline\\Demoblaze_Jenkins_Pipeline.jmx" ^
-                        -l "%WORKSPACE_PATH%\\results\\results.jtl" ^
-                        -e -o "%WORKSPACE_PATH%\\html-report"
+                    REM Run JMeter WITHOUT changing directory - use full paths
+                    "D:\\C-jmeter-5.6.3\\jmeter-5.6.3\\bin\\jmeter.bat" -n ^
+                        -t "%WORKSPACE%\\jmeter-jira-pipeline\\Demoblaze_Jenkins_Pipeline.jmx" ^
+                        -l "%WORKSPACE%\\results\\results.jtl" ^
+                        -e -o "%WORKSPACE%\\html-report"
                 '''
             }
         }
