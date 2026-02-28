@@ -20,11 +20,15 @@ pipeline {
                     mkdir results
                     mkdir html-report
                     
-                    REM Run JMeter WITHOUT changing directory - use full paths
-                    "D:\\C-jmeter-5.6.3\\jmeter-5.6.3\\bin\\jmeter.bat" -n ^
-                        -t "%WORKSPACE%\\jmeter-jira-pipeline\\Demoblaze_Jenkins_Pipeline.jmx" ^
-                        -l "%WORKSPACE%\\results\\results.jtl" ^
-                        -e -o "%WORKSPACE%\\html-report"
+                    REM DEBUG: Verify workspace and files
+                    echo WORKSPACE=%%WORKSPACE%%
+                    dir "%%WORKSPACE%%\\jmeter-jira-pipeline"
+                    
+                    REM Run JMeter with EXACT PATH - stays in workspace
+                    "C:\\\\Users\\\\Admin\\\\Desktop\\\\Tools\\\\JMeter\\\\apache-jmeter-5.6.3\\\\apache-jmeter-5.6.3\\\\bin\\\\jmeter.bat" -n ^
+                        -t "%%WORKSPACE%%\\jmeter-jira-pipeline\\Demoblaze_Jenkins_Pipeline.jmx" ^
+                        -l "%%WORKSPACE%%\\results\\results.jtl" ^
+                        -e -o "%%WORKSPACE%%\\html-report"
                 '''
             }
         }
