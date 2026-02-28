@@ -4,6 +4,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
+                // Ensure we are pulling the latest from your repository [cite: 9]
                 git branch: 'main',
                     url: 'https://github.com/meeraraju27/demoblaze-performance-tests.git'
             }
@@ -11,28 +12,30 @@ pipeline {
 
         stage('Run JMeter Stress Test') {
             steps {
-                bat '''
-                    REM FULL CLEAN - remove stale results/HTML
+                // Using triple double quotes (""") to allow Jenkins to resolve %WORKSPACE% [cite: 10]
+                bat """
+                    REM FULL CLEAN - remove stale results/HTML [cite: 10]
                     if exist results rmdir /s /q results
                     if exist html-report rmdir /s /q html-report
                     
-                    REM Create fresh directories
+                    REM Create fresh directories [cite: 11]
                     mkdir results
                     
-                    REM Go to your JMeter bin
+                    REM Navigate to your JMeter bin directory [cite: 12]
                     cd /d "C:\\Users\\Admin\\Desktop\\Tools\\JMeter\\apache-jmeter-5.6.3\\apache-jmeter-5.6.3\\bin"
                     
-                    REM Run from workspace root path
+                    REM Run JMeter using the %WORKSPACE% variable to point back to your project files 
                     jmeter -n ^
-                        -t "..\\jmeter-jira-pipeline\\Demoblaze_Jenkins_Pipeline.jmx" ^
-                        -l "..\\results\\results.jtl" ^
-                        -e -o "..\\html-report"
-                '''
+                        -t "%WORKSPACE%\\jmeter-jira-pipeline\\Demoblaze_Jenkins_Pipeline.jmx" ^
+                        -l "%WORKSPACE%\\results\\results.jtl" ^
+                        -e -o "%WORKSPACE%\\html-report"
+                """
             }
         }
 
         stage('Publish HTML Report') {
             steps {
+                // Configures the Jenkins UI to show your test results [cite: 14, 15]
                 publishHTML([
                     allowMissing: false,
                     alwaysLinkToLastBuild: true,
@@ -47,32 +50,34 @@ pipeline {
         stage('Jira Automation') {
             steps {
                 script {
-                    def resultsFile = 'results/results.jtl'
+                    def resultsFile = 'results/results.jtl' [cite: 17]
                     
                     if (fileExists(resultsFile)) {
                         def content = readFile(resultsFile)
+                        // This regex scans the JTL for failed (false) transactions [cite: 17, 18]
                         def failCount = (content =~ /(?s).*?false,.*?/).size()
                         
-                        echo "Failed requests: ${failCount}"
+                        echo "Failed requests: ${failCount}" [cite: 18]
                         
                         if (failCount > 0) {
-                            echo " Creating Jira ticket..."
-                            withCredentials([string(credentialsId: 'JIRA_API_TOKEN', variable: 'JIRA_TOKEN')]) {
+                            echo "Creating Jira ticket..." [cite: 19]
+                            withCredentials([string(credentialsId: 'JIRA_API_TOKEN', variable: 'JIRA_TOKEN')]) { [cite: 19]
+                                // Note: Escaped quotes (\\") are used for the JSON body inside double quotes
                                 def response = bat(
                                     script: """
                                         curl -s -X POST ^
                                         -H "Content-Type: application/json" ^
                                         -u "meeraraju2711@gmail.com:${JIRA_TOKEN}" ^
-                                        -d "{\"fields\":{\"project\":{\"key\":\"KAN\"},\"summary\":\"Demoblaze Perf FAIL - ${failCount} errors\",\"description\":\"Build ${BUILD_NUMBER}: 33% failure rate.\\\\n${BUILD_URL}\",\"issuetype\":{\"name\":\"Bug\"}}}" ^
+                                        -d "{\\\"fields\\\":{\\\"project\\\":{\\\"key\\\":\\\"KAN\\\"},\\\"summary\\\":\\\"Demoblaze Perf FAIL - ${failCount} errors\\\",\\\"description\\\":\\\"Build ${BUILD_NUMBER}: failure detected.\\\\n${BUILD_URL}\\\",\\\"issuetype\\\":{\\\"name\\\":\\\"Bug\\\"}}}" ^
                                         https://meeraraju2711.atlassian.net/rest/api/2/issue
-                                    """,
-                                    returnStdout: true
+                                    """, [cite: 20, 21, 22]
+                                    returnStdout: true [cite: 23]
                                 ).trim()
                                 
-                                echo "Jira response: ${response}"
+                                echo "Jira response: ${response}" [cite: 24]
                             }
                         } else {
-                            echo "All tests passed!"
+                            echo "All tests passed!" [cite: 25]
                         }
                     }
                 }
@@ -82,22 +87,23 @@ pipeline {
 
     post {
         always {
+            // Keep the results and reports as artifacts for every build [cite: 25]
             archiveArtifacts artifacts: 'results/**, html-report/**', allowEmptyArchive: true
-            echo "Build ${BUILD_NUMBER} complete - check report above!"
+            echo "Build ${BUILD_NUMBER} complete - check report above!" [cite: 26]
         }
         success {
             emailext (
                 subject: "Demoblaze Perf SUCCESS #${BUILD_NUMBER}",
                 body: "All tests passed! ${BUILD_URL}html-report/",
                 to: "meeraraju2711@gmail.com"
-            )
+            ) [cite: 27]
         }
         failure {
             emailext (
                 subject: "Demoblaze Perf FAILED #${BUILD_NUMBER}",
                 body: "Check results: ${BUILD_URL}",
                 to: "meeraraju2711@gmail.com"
-            )
+            ) [cite: 28]
         }
     }
 }
