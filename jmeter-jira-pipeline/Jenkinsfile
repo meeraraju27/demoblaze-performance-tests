@@ -11,26 +11,20 @@ pipeline {
 
         stage('Run JMeter Stress Test') {
             steps {
-                script {
-                    def ws = env.WORKSPACE
-                    bat """
-                        REM FULL CLEAN - remove stale results/HTML
-                        if exist results rmdir /s /q results
-                        if exist html-report rmdir /s /q html-report
-                        
-                        REM Create fresh directories
-                        mkdir results
-                        mkdir html-report
-                        
-                        REM Run JMeter with EXACT PATH - no cd needed
-                        "C:\\Users\\Admin\\Desktop\\Tools\\JMeter\\apache-jmeter-5.6.3\\apache-jmeter-5.6.3\\bin\\jmeter.bat" -n ^
-                            -t "${ws}\\jmeter-jira-pipeline\\Demoblaze_Jenkins_Pipeline.jmx" ^
-                            -l "${ws}\\results\\results.jtl" ^
-                            -e -o "${ws}\\html-report"
-                    """
-                    // COPY HTML REPORT TO WORKSPACE for publishHTML
-                    bat "xcopy /E /Y \"${ws}\\html-report\" html-report"
-                }
+                bat '''
+                    REM FULL CLEAN
+                    if exist results rmdir /s /q results
+                    if exist html-report rmdir /s /q html-report
+                    
+                    mkdir results
+                    mkdir html-report
+                    
+                    REM Run JMeter DIRECTLY to workspace dirs
+                    "C:\\Users\\Admin\\Desktop\\Tools\\JMeter\\apache-jmeter-5.6.3\\apache-jmeter-5.6.3\\bin\\jmeter.bat" -n ^
+                        -t "jmeter-jira-pipeline\\Demoblaze_Jenkins_Pipeline.jmx" ^
+                        -l "results\\results.jtl" ^
+                        -e -o "html-report"
+                '''
             }
         }
 
@@ -59,16 +53,16 @@ pipeline {
                         if (failCount > 0) {
                             echo "Creating Jira ticket..."
                             withCredentials([string(credentialsId: 'JIRA_API_TOKEN', variable: 'JIRA_TOKEN')]) {
-                                bat """
+                                bat '''
                                     curl -s -X POST ^
                                     -H "Content-Type: application/json" ^
                                     -u "meeraraju2711@gmail.com:%JIRA_TOKEN%" ^
-                                    -d "{ \\"fields\\": { \\"project\\": { \\"key\\": \\"KAN\\" }, \\"summary\\": \\"Demoblaze Perf FAIL - ${failCount} errors\\", \\"description\\": \\"Build %BUILD_NUMBER%: 33%\\\\% failure rate. %BUILD_URL%\\", \\"issuetype\\": { \\"name\\": \\"Bug\\" } } }" ^
+                                    -d "{ \"fields\": { \"project\": { \"key\": \"KAN\" }, \"summary\": \"Demoblaze Perf FAIL - %failCount% errors\", \"description\": \"Build %BUILD_NUMBER%: 38%% failure rate. %BUILD_URL%\", \"issuetype\": { \"name\": \"Bug\" } } }" ^
                                     "https://meeraraju2711.atlassian.net/rest/api/2/issue"
-                                """
+                                '''
                             }
                         } else {
-                            echo "All tests passed - no Jira ticket needed."
+                            echo "All tests passed!"
                         }
                     }
                 }
@@ -79,7 +73,7 @@ pipeline {
     post {
         always {
             archiveArtifacts artifacts: 'results/**, html-report/**', allowEmptyArchive: true
-            echo "Build ${BUILD_NUMBER} complete - view Demoblaze Performance Report above!"
+            echo "Build ${BUILD_NUMBER} complete - Demoblaze report published!"
         }
     }
 }
