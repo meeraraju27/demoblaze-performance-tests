@@ -1,0 +1,89 @@
+pipeline {
+    agent any
+
+    environment {
+        JMETER_BIN   = 'C:\\Users\\Admin\\Desktop\\Tools\\JMeter\\apache-jmeter-5.6.3\\apache-jmeter-5.6.3\\bin\\jmeter.bat'
+        JMX_FILE     = 'jenkins-jira-pipeline\\Demoblaze_Jenkins_Pipeline.jmx'
+        RESULTS_DIR  = 'results'
+        RESULTS_FILE = "${RESULTS_DIR}\\results.jtl"
+        REPORT_DIR   = 'html-report'
+        JIRA_URL     = 'https://meeraraju2711.atlassian.net'
+        JIRA_EMAIL   = 'meeraraju2711@gmail.com'
+        JIRA_PROJECT = 'KAN'
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                git branch: 'main',
+                    url: 'https://github.com/meeraraju27/demoblaze-performance-tests.git'
+            }
+        }
+
+        stage('Run JMeter Stress Test') {
+            steps {
+                bat """
+                    if not exist "${RESULTS_DIR}" mkdir "${RESULTS_DIR}"
+                    if exist "${REPORT_DIR}" rmdir /s /q "${REPORT_DIR}"
+                    "${JMETER_BIN}" -n -t "${JMX_FILE}" ^
+                        -l "${RESULTS_FILE}" ^
+                        -e -o "${REPORT_DIR}"
+                """
+            }
+        }
+
+        stage('Publish HTML Report') {
+            steps {
+                publishHTML(target: [
+                    allowMissing         : false,
+                    alwaysLinkToLastBuild: true,
+                    keepAll              : true,
+                    reportDir            : "${REPORT_DIR}",
+                    reportFiles          : 'index.html',
+                    reportName           : 'JMeter Stress Test Report'
+                ])
+            }
+        }
+
+        stage('Check Results & Create Jira Ticket') {
+            steps {
+                script {
+                    def failCount = bat(
+                        script: "@findstr /c:\",false,\" \"${RESULTS_FILE}\"",
+                        returnStdout: true
+                    ).trim().readLines().size()
+
+                    echo "Failed samples: ${failCount}"
+
+                    if (failCount > 0) {
+                        echo "Failures found! Creating Jira ticket..."
+                        withCredentials([string(credentialsId: 'JIRA_API_TOKEN', variable: 'JIRA_TOKEN')]) {
+                            bat """
+                                curl -s -X POST ^
+                                -H "Content-Type: application/json" ^
+                                -u "${JIRA_EMAIL}:%JIRA_TOKEN%" ^
+                                --data "{\\"fields\\":{\\"project\\":{\\"key\\":\\"${JIRA_PROJECT}\\"},\\"summary\\":\\"Jenkins - Stress Test Failed (${failCount} samples)\\",\\"description\\":\\"Automated failure detected by Jenkins.\\\\n\\\\nFailed Samples: ${failCount}\\\\nBuild Number: %BUILD_NUMBER%\\\\nBuild URL: %BUILD_URL%\\",\\"issuetype\\":{\\"name\\":\\"Bug\\"}}}" ^
+                                ${JIRA_URL}/rest/api/2/issue
+                            """
+                        }
+                    } else {
+                        echo "All tests passed! No Jira ticket needed."
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Pipeline completed successfully!"
+        }
+        failure {
+            echo "Pipeline failed! Check the console output."
+        }
+        always {
+            echo "Build ${BUILD_NUMBER} finished."
+        }
+    }
+}
