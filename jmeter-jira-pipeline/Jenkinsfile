@@ -14,19 +14,22 @@ pipeline {
                 script {
                     def ws = env.WORKSPACE
                     bat """
-                        REM FULL CLEAN
+                        REM FULL CLEAN - remove stale results/HTML
                         if exist results rmdir /s /q results
                         if exist html-report rmdir /s /q html-report
                         
+                        REM Create fresh directories
                         mkdir results
                         mkdir html-report
                         
-                        REM Run JMeter
-                        "C:\\\\Users\\\\Admin\\\\Desktop\\\\Tools\\\\JMeter\\\\apache-jmeter-5.6.3\\\\apache-jmeter-5.6.3\\\\bin\\\\jmeter.bat" -n ^
-                            -t "${ws}\\\\jmeter-jira-pipeline\\\\Demoblaze_Jenkins_Pipeline.jmx" ^
-                            -l "${ws}\\\\results\\\\results.jtl" ^
-                            -e -o "${ws}\\\\html-report"
+                        REM Run JMeter with EXACT PATH - no cd needed
+                        "C:\\Users\\Admin\\Desktop\\Tools\\JMeter\\apache-jmeter-5.6.3\\apache-jmeter-5.6.3\\bin\\jmeter.bat" -n ^
+                            -t "${ws}\\jmeter-jira-pipeline\\Demoblaze_Jenkins_Pipeline.jmx" ^
+                            -l "${ws}\\results\\results.jtl" ^
+                            -e -o "${ws}\\html-report"
                     """
+                    // COPY HTML REPORT TO WORKSPACE for publishHTML
+                    bat "xcopy /E /Y \"${ws}\\html-report\" html-report"
                 }
             }
         }
@@ -60,7 +63,7 @@ pipeline {
                                     curl -s -X POST ^
                                     -H "Content-Type: application/json" ^
                                     -u "meeraraju2711@gmail.com:%JIRA_TOKEN%" ^
-                                    -d "{ \\"fields\\": { \\"project\\": { \\"key\\": \\"KAN\\" }, \\"summary\\": \\"Demoblaze Perf FAIL - ${failCount} errors\\", \\"description\\": \\"Build %BUILD_NUMBER%: 33%% failure rate. %BUILD_URL%\\", \\"issuetype\\": { \\"name\\": \\"Bug\\" } } }" ^
+                                    -d "{ \\"fields\\": { \\"project\\": { \\"key\\": \\"KAN\\" }, \\"summary\\": \\"Demoblaze Perf FAIL - ${failCount} errors\\", \\"description\\": \\"Build %BUILD_NUMBER%: 33%\\\\% failure rate. %BUILD_URL%\\", \\"issuetype\\": { \\"name\\": \\"Bug\\" } } }" ^
                                     "https://meeraraju2711.atlassian.net/rest/api/2/issue"
                                 """
                             }
