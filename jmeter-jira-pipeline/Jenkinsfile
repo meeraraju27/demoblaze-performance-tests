@@ -12,18 +12,21 @@ pipeline {
         stage('Run JMeter Stress Test') {
             steps {
                 bat '''
-                    REM Clean previous results
-                    if not exist results mkdir results
+                    REM FULL CLEAN - remove stale results/HTML
+                    if exist results rmdir /s /q results
                     if exist html-report rmdir /s /q html-report
                     
-                    REM Go to JMeter bin and run directly
+                    REM Create fresh directories
+                    mkdir results
+                    
+                    REM Go to your JMeter bin
                     cd /d "C:\\Users\\Admin\\Desktop\\Tools\\JMeter\\apache-jmeter-5.6.3\\apache-jmeter-5.6.3\\bin"
                     
-                    REM Full workspace paths - adjust if workspace path differs
+                    REM Run from workspace root path
                     jmeter -n ^
-                        -t "C:\\ProgramData\\Jenkins\\.jenkins\\workspace\\Demoblaze-Performance-Pipeline\\jmeter-jira-pipeline\\Demoblaze_Jenkins_Pipeline.jmx" ^
-                        -l "C:\\ProgramData\\Jenkins\\.jenkins\\workspace\\Demoblaze-Performance-Pipeline\\results\\results.jtl" ^
-                        -e -o "C:\\ProgramData\\Jenkins\\.jenkins\\workspace\\Demoblaze-Performance-Pipeline\\html-report"
+                        -t "..\\jmeter-jira-pipeline\\Demoblaze_Jenkins_Pipeline.jmx" ^
+                        -l "..\\results\\results.jtl" ^
+                        -e -o "..\\html-report"
                 '''
             }
         }
@@ -36,7 +39,7 @@ pipeline {
                     keepAll: true,
                     reportDir: 'html-report',
                     reportFiles: 'index.html',
-                    reportName: 'JMeter Report'
+                    reportName: 'Demoblaze Performance Report'
                 ])
             }
         }
@@ -44,29 +47,33 @@ pipeline {
         stage('Jira Automation') {
             steps {
                 script {
-                    def resultsFile = 'results\\results.jtl'
-                    def failCount = 0
+                    def resultsFile = 'results/results.jtl'
                     
                     if (fileExists(resultsFile)) {
-                        def results = readFile(resultsFile)
-                        failCount = (results =~ /(?s).*?false,.*?/).size()
-                    }
-                    
-                    echo "Failed requests: ${failCount}"
-                    
-                    if (failCount > 0) {
-                        echo "Creating Jira ticket for ${failCount} failures"
-                        withCredentials([string(credentialsId: 'JIRA_API_TOKEN', variable: 'JIRA_TOKEN')]) {
-                            bat """
-                                curl -X POST ^
-                                -H "Authorization: Basic %JIRA_EMAIL%:%JIRA_TOKEN%" ^
-                                -H "Content-Type: application/json" ^
-                                -d "{\"fields\":{\"project\":{\"key\":\"KAN\"},\"summary\":\"Performance Test Failed - ${failCount} errors\",\"description\":\"JMeter test failed in build %BUILD_NUMBER%. Check: %BUILD_URL%\",\"issuetype\":{\"name\":\"Bug\"}}}" ^
-                                https://meeraraju2711.atlassian.net/rest/api/2/issue
-                            """
+                        def content = readFile(resultsFile)
+                        def failCount = (content =~ /(?s).*?false,.*?/).size()
+                        
+                        echo "Failed requests: ${failCount}"
+                        
+                        if (failCount > 0) {
+                            echo " Creating Jira ticket..."
+                            withCredentials([string(credentialsId: 'JIRA_API_TOKEN', variable: 'JIRA_TOKEN')]) {
+                                def response = bat(
+                                    script: """
+                                        curl -s -X POST ^
+                                        -H "Content-Type: application/json" ^
+                                        -u "meeraraju2711@gmail.com:${JIRA_TOKEN}" ^
+                                        -d "{\"fields\":{\"project\":{\"key\":\"KAN\"},\"summary\":\"Demoblaze Perf FAIL - ${failCount} errors\",\"description\":\"Build ${BUILD_NUMBER}: 33% failure rate.\\\\n${BUILD_URL}\",\"issuetype\":{\"name\":\"Bug\"}}}" ^
+                                        https://meeraraju2711.atlassian.net/rest/api/2/issue
+                                    """,
+                                    returnStdout: true
+                                ).trim()
+                                
+                                echo "Jira response: ${response}"
+                            }
+                        } else {
+                            echo "All tests passed!"
                         }
-                    } else {
-                        echo " All tests passed!"
                     }
                 }
             }
@@ -75,11 +82,22 @@ pipeline {
 
     post {
         always {
-            echo "Build ${BUILD_NUMBER} complete."
             archiveArtifacts artifacts: 'results/**, html-report/**', allowEmptyArchive: true
+            echo "Build ${BUILD_NUMBER} complete - check report above!"
+        }
+        success {
+            emailext (
+                subject: "Demoblaze Perf SUCCESS #${BUILD_NUMBER}",
+                body: "All tests passed! ${BUILD_URL}html-report/",
+                to: "meeraraju2711@gmail.com"
+            )
         }
         failure {
-            echo "Check console above."
+            emailext (
+                subject: "Demoblaze Perf FAILED #${BUILD_NUMBER}",
+                body: "Check results: ${BUILD_URL}",
+                to: "meeraraju2711@gmail.com"
+            )
         }
     }
 }
