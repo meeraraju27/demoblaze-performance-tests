@@ -4,7 +4,6 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                // Ensure we are pulling the latest from your repository [cite: 9]
                 git branch: 'main',
                     url: 'https://github.com/meeraraju27/demoblaze-performance-tests.git'
             }
@@ -12,30 +11,32 @@ pipeline {
 
         stage('Run JMeter Stress Test') {
             steps {
-                // Using triple double quotes (""") to allow Jenkins to resolve %WORKSPACE% [cite: 10]
-                bat """
-                    REM FULL CLEAN - remove stale results/HTML [cite: 10]
+                bat '''
+                    REM FULL CLEAN - remove stale results/HTML
                     if exist results rmdir /s /q results
                     if exist html-report rmdir /s /q html-report
                     
-                    REM Create fresh directories [cite: 11]
+                    REM Create fresh directories
                     mkdir results
+                    mkdir html-report
                     
-                    REM Navigate to your JMeter bin directory [cite: 12]
+                    REM Store workspace path
+                    for /f "tokens=*" %%i in ('call "%~dp0jenkins.cmd"') do set WORKSPACE_PATH=%%i
+                    
+                    REM Go to your JMeter bin
                     cd /d "C:\\Users\\Admin\\Desktop\\Tools\\JMeter\\apache-jmeter-5.6.3\\apache-jmeter-5.6.3\\bin"
                     
-                    REM Run JMeter using the %WORKSPACE% variable to point back to your project files 
+                    REM Run JMeter using absolute workspace paths
                     jmeter -n ^
-                        -t "%WORKSPACE%\\jmeter-jira-pipeline\\Demoblaze_Jenkins_Pipeline.jmx" ^
-                        -l "%WORKSPACE%\\results\\results.jtl" ^
-                        -e -o "%WORKSPACE%\\html-report"
-                """
+                        -t "%WORKSPACE_PATH%\\jmeter-jira-pipeline\\Demoblaze_Jenkins_Pipeline.jmx" ^
+                        -l "%WORKSPACE_PATH%\\results\\results.jtl" ^
+                        -e -o "%WORKSPACE_PATH%\\html-report"
+                '''
             }
         }
 
         stage('Publish HTML Report') {
             steps {
-                // Configures the Jenkins UI to show your test results [cite: 14, 15]
                 publishHTML([
                     allowMissing: false,
                     alwaysLinkToLastBuild: true,
@@ -50,34 +51,32 @@ pipeline {
         stage('Jira Automation') {
             steps {
                 script {
-                    def resultsFile = 'results/results.jtl' [cite: 17]
+                    def resultsFile = 'results/results.jtl'
                     
                     if (fileExists(resultsFile)) {
                         def content = readFile(resultsFile)
-                        // This regex scans the JTL for failed (false) transactions [cite: 17, 18]
                         def failCount = (content =~ /(?s).*?false,.*?/).size()
                         
-                        echo "Failed requests: ${failCount}" [cite: 18]
+                        echo "Failed requests: ${failCount}"
                         
                         if (failCount > 0) {
-                            echo "Creating Jira ticket..." [cite: 19]
-                            withCredentials([string(credentialsId: 'JIRA_API_TOKEN', variable: 'JIRA_TOKEN')]) { [cite: 19]
-                                // Note: Escaped quotes (\\") are used for the JSON body inside double quotes
+                            echo "Creating Jira ticket..."
+                            withCredentials([string(credentialsId: 'JIRA_API_TOKEN', variable: 'JIRA_TOKEN')]) {
                                 def response = bat(
                                     script: """
                                         curl -s -X POST ^
                                         -H "Content-Type: application/json" ^
                                         -u "meeraraju2711@gmail.com:${JIRA_TOKEN}" ^
-                                        -d "{\\\"fields\\\":{\\\"project\\\":{\\\"key\\\":\\\"KAN\\\"},\\\"summary\\\":\\\"Demoblaze Perf FAIL - ${failCount} errors\\\",\\\"description\\\":\\\"Build ${BUILD_NUMBER}: failure detected.\\\\n${BUILD_URL}\\\",\\\"issuetype\\\":{\\\"name\\\":\\\"Bug\\\"}}}" ^
+                                        -d "{\"fields\":{\"project\":{\"key\":\"KAN\"},\"summary\":\"Demoblaze Perf FAIL - ${failCount} errors\",\"description\":\"Build ${BUILD_NUMBER}: 33% failure rate.\\n${BUILD_URL}\",\"issuetype\":{\"name\":\"Bug\"}}}" ^
                                         https://meeraraju2711.atlassian.net/rest/api/2/issue
-                                    """, [cite: 20, 21, 22]
-                                    returnStdout: true [cite: 23]
+                                    """,
+                                    returnStdout: true
                                 ).trim()
                                 
-                                echo "Jira response: ${response}" [cite: 24]
+                                echo "Jira response: ${response}"
                             }
                         } else {
-                            echo "All tests passed!" [cite: 25]
+                            echo "All tests passed!"
                         }
                     }
                 }
@@ -87,23 +86,22 @@ pipeline {
 
     post {
         always {
-            // Keep the results and reports as artifacts for every build [cite: 25]
             archiveArtifacts artifacts: 'results/**, html-report/**', allowEmptyArchive: true
-            echo "Build ${BUILD_NUMBER} complete - check report above!" [cite: 26]
+            echo "Build ${BUILD_NUMBER} complete - check report above!"
         }
         success {
             emailext (
                 subject: "Demoblaze Perf SUCCESS #${BUILD_NUMBER}",
                 body: "All tests passed! ${BUILD_URL}html-report/",
                 to: "meeraraju2711@gmail.com"
-            ) [cite: 27]
+            )
         }
         failure {
             emailext (
                 subject: "Demoblaze Perf FAILED #${BUILD_NUMBER}",
                 body: "Check results: ${BUILD_URL}",
                 to: "meeraraju2711@gmail.com"
-            ) [cite: 28]
+            )
         }
     }
 }
